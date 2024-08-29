@@ -2,8 +2,6 @@
 
 ## **Task**: **Develop a Staking and Reward System Smart Contract**
 
-**Task Duration : 2 days**
-
 ### **Objective:**
 
 You are tasked with developing a Solidity smart contract that allows users to deposit a specific ERC20 token into a staking pool. In return, users will earn rewards based on the amount they have staked and the duration of their staking period. The system will also include a penalty for early withdrawals and allow users to choose different reward tokens if available.
