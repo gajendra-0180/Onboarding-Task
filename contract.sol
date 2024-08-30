@@ -169,7 +169,7 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
     function setEarlyWithdrawalPenalty(uint256 _penalty) external onlyOwner {
         if (_penalty <= 0 || _penalty > 1e18) revert InvalidInput("Penalty must be between 0 and 100%");
         uint256 prevPenalty=earlyWithdrawalPenalty;
-        earlyWithdrawalPenalty = _penalty * 1e18;
+        earlyWithdrawalPenalty = _penalty;
         emit EarlyWithdrawalPenaltyUpdated(prevPenalty, earlyWithdrawalPenalty, msg.sender);
     }
 
