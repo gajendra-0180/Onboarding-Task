@@ -52,7 +52,7 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
     function initialize(address _stakingToken, address[] memory _rewardTokens) public initializer {
         __Pausable_init();
         stakingToken = IERC20(_stakingToken);
-        minStakingPeriod = 30;
+        minStakingPeriod = 30 *86400;
         earlyWithdrawalPenalty = 1e16;
         rewardRate = 1 * 1e18;
 
@@ -172,8 +172,8 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
 
     // Function to set the minimum staking period
     function setMinStakingPeriod(uint256 period) external onlyOwner {
-        emit MinStakingPeriodUpdated(minStakingPeriod, period, msg.sender);
-        minStakingPeriod = period;
+        emit MinStakingPeriodUpdated(minStakingPeriod, period*86400, msg.sender);
+        minStakingPeriod = period*86400;
     }
 
     // Function to set the early withdrawal penalty percentage
