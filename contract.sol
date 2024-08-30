@@ -5,8 +5,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, Initializable {
+    using SafeERC20 for IERC20;
+
     // The token that users will stake
     IERC20 public stakingToken;
 
@@ -39,6 +42,7 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
     event MinStakingPeriodUpdated(uint256 previousPeriod, uint256 newPeriod, address updatedBy);
     event EarlyWithdrawalPenaltyUpdated(uint256 previousPenalty, uint256 newPenalty, address updatedBy);
     event RewardRateUpdated(uint256 previousRate, uint256 newRate, address updatedBy);
+    event RewardTokensRetrieved(address[] rewardTokens, address retrievedBy);
 
     // Custom errors for more efficient error handling
     error InvalidAmount();
@@ -81,7 +85,7 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
         if (_amount <= 0) revert InvalidAmount();
         if (_rewardToken == address(0)) revert InvalidInput("Reward token address cannot be zero");
         if (!isRewardToken[_rewardToken]) revert InvalidRewardToken();
-        stakingToken.transferFrom(msg.sender, address(this), _amount);
+        stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
         Stake storage userStake = userStakes[msg.sender][_rewardToken];
         userStake.amount += _amount;
         userStake.startTime = block.timestamp;
@@ -99,6 +103,7 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
         uint256 penalty = 0;
         if (block.timestamp < userStake.startTime + minStakingPeriod) {
             penalty = (_amount * earlyWithdrawalPenalty) / 1e18;
+            if(penalty+_amount>userStake.amount) revert InvalidInput("Withdrawl amount is greater");
             _amount -= penalty;
             accumulatedPenalties += penalty;
         }
@@ -117,7 +122,7 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
         if (block.timestamp <= userStake.startTime + minStakingPeriod) revert CannotClaimRewardYet();
 
         uint256 rewardAmount = _calculateReward(userStake);
-        IERC20(_rewardToken).transfer(msg.sender, rewardAmount);
+        IERC20(_rewardToken).safeTransfer(msg.sender, rewardAmount);
         userStake.startTime = block.timestamp;
         emit RewardClaimed(msg.sender, rewardAmount, _rewardToken);
     }
@@ -155,26 +160,30 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
     // Function to set the minimum staking period
     function setMinStakingPeriod(uint256 _period) external onlyOwner {
         if (_period <= 0) revert InvalidInput("Minimum staking period must be greater than zero");
-        emit MinStakingPeriodUpdated(minStakingPeriod, _period*86400, msg.sender);
+        uint256 prevminStakingPeriod=minStakingPeriod;
         minStakingPeriod = _period*86400;
+        emit MinStakingPeriodUpdated(prevminStakingPeriod,minStakingPeriod, msg.sender);
     }
 
     // Function to set the early withdrawal penalty percentage
     function setEarlyWithdrawalPenalty(uint256 _penalty) external onlyOwner {
         if (_penalty <= 0 || _penalty > 1e18) revert InvalidInput("Penalty must be between 0 and 100%");
-        emit EarlyWithdrawalPenaltyUpdated(earlyWithdrawalPenalty, _penalty, msg.sender);
+        uint256 prevPenalty=earlyWithdrawalPenalty;
         earlyWithdrawalPenalty = _penalty * 1e18;
+        emit EarlyWithdrawalPenaltyUpdated(prevPenalty, earlyWithdrawalPenalty, msg.sender);
     }
 
     // Function to set the reward rate
     function setRewardRate(uint256 _rate) external onlyOwner {
         if (_rate <= 0) revert InvalidInput("Reward rate must be greater than zero");
-        emit RewardRateUpdated(rewardRate, _rate, msg.sender);
+        uint256 preRewardRate=rewardRate;
         rewardRate = _rate;
+        emit RewardRateUpdated(preRewardRate, rewardRate, msg.sender);
     }
 
     // Function to get the list of reward tokens
     function getRewardTokens() external view returns (address[] memory) {
+        emit RewardTokensRetrieved(rewardTokens, msg.sender);
         return rewardTokens;
     }
 
