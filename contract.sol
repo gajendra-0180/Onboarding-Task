@@ -7,135 +7,185 @@ import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, Initializable {
+    // The token that users will stake
+    IERC20 public stakingToken;
 
-    IERC20 public stakingToken;  // The token that users will stake
-
-    // Structure to represent each stake
+    // Represents each stake by the user
     struct Stake {
         uint256 amount;  // Amount of tokens staked
         uint256 startTime;  // Timestamp when the stake was created
+        uint256 rewardEarned;  // Reward earned so far
     }
-    
-    uint256 public minStakingPeriod;  // Minimum period required to avoid early withdrawal penalties
-    uint256 public earlyWithdrawalPenalty;  // Penalty percentage for early withdrawal (scaled to 1e18)
-    uint256 public rewardRate;  // Rate at which rewards are calculated (scaled to 1e18)
-    uint256 public accumulatedPenalties;  // Holds the total penalties accumulated (in token's smallest unit)
 
-    address[] public rewardTokens;  // List of tokens available as rewards
+    // Contract configuration variables
+    uint256 public minStakingPeriod;
+    uint256 public earlyWithdrawalPenalty;
+    uint256 public rewardRate;
+    uint256 public accumulatedPenalties;
 
-    // Mapping to track each user's stakes based on the reward token they selected
-    mapping(address => mapping(address => Stake)) public stakes;
-    mapping(address => bool) public isRewardToken;  // Tracks if a token is a valid reward token
+    // List of reward tokens
+    address[] public rewardTokens;
+    mapping(address => bool) public isRewardToken;
 
-    // Events for logging key actions in the contract
+    // Maps user addresses to their stakes by reward token
+    mapping(address => mapping(address => Stake)) private userStakes;
+
+    // Events for logging important contract actions
     event Staked(address indexed user, uint256 amount, address indexed rewardToken);
     event Withdrawn(address indexed user, uint256 amount, uint256 penalty, address indexed rewardToken);
     event RewardClaimed(address indexed user, uint256 rewardAmount, address indexed rewardToken);
     event PenaltiesWithdrawn(address indexed owner, uint256 amount);
+    event RewardTokenAdded(address indexed rewardToken, address addedBy);
+    event MinStakingPeriodUpdated(uint256 previousPeriod, uint256 newPeriod, address updatedBy);
+    event EarlyWithdrawalPenaltyUpdated(uint256 previousPenalty, uint256 newPenalty, address updatedBy);
+    event RewardRateUpdated(uint256 previousRate, uint256 newRate, address updatedBy);
 
     // Custom errors for more efficient error handling
-    error InvalidAmount();  // Thrown when staking amount is 0 or negative
-    error InvalidRewardToken();  // Thrown when an invalid reward token is specified
-    error WithdrawAmountExceedsStake();  // Thrown when trying to withdraw more than staked
-    error NoStakeFound();  // Thrown when trying to claim reward without a stake
-    error CannotClaimRewardYet();  // Thrown when attempting to claim reward too early
-    error NoPenaltiesToWithdraw();  // Thrown when no penalties are available for withdrawal by the owner
+    error InvalidAmount();
+    error InvalidRewardToken();
+    error WithdrawAmountExceedsStake();
+    error NoStakeFound();
+    error CannotClaimRewardYet();
+    error NoPenaltiesToWithdraw();
 
     // Initializer function to replace constructor for upgradeable contracts
     function initialize(address _stakingToken, address[] memory _rewardTokens) public initializer {
-        __Pausable_init();  // Initialize pausable functionality
-        stakingToken = IERC20(_stakingToken);  // Set the staking token
-        minStakingPeriod = 30;  // Set the minimum staking period
-        earlyWithdrawalPenalty = 10 * 1e18;  // Set the early withdrawal penalty percentage, scaled to 1e18
-        rewardRate = 1 * 1e18;  // Set the reward rate, scaled to 1e18
+        __Pausable_init();
+        stakingToken = IERC20(_stakingToken);
+        minStakingPeriod = 30;
+        earlyWithdrawalPenalty = 1e16;
+        rewardRate = 1 * 1e18;
 
-        // Add reward tokens and mark them as valid
+        _addRewardTokens(_rewardTokens);
+    }
+
+    // Internal function to add multiple reward tokens during initialization
+    function _addRewardTokens(address[] memory _rewardTokens) internal {
         for (uint256 i = 0; i < _rewardTokens.length; i++) {
-            rewardTokens.push(_rewardTokens[i]);
-            isRewardToken[_rewardTokens[i]] = true;
+            _addRewardToken(_rewardTokens[i]);
         }
+    }
+
+    // Pause the contract
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    // Unpause the contract
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     // Function to stake tokens
     function stake(uint256 amount, address rewardToken) external nonReentrant whenNotPaused {
-        if (amount <= 0) revert InvalidAmount();  // Ensure amount is positive
-        if (!isRewardToken[rewardToken]) revert InvalidRewardToken();  // Ensure reward token is valid
+        _validateStake(amount, rewardToken);
+        stakingToken.transferFrom(msg.sender, address(this), amount);
+        _updateStake(msg.sender, rewardToken, amount);
+        emit Staked(msg.sender, amount, rewardToken);
+    }
 
-        stakingToken.transferFrom(msg.sender, address(this), amount);  // Transfer staked tokens to the contract
+    // Internal function to validate staking parameters
+    function _validateStake(uint256 amount, address rewardToken) internal view {
+        if (amount <= 0) revert InvalidAmount();
+        if (!isRewardToken[rewardToken]) revert InvalidRewardToken();
+    }
 
-        Stake storage userStake = stakes[msg.sender][rewardToken];  // Access the user's stake for this reward token
-        userStake.amount += amount;  // Update the staked amount
-        userStake.startTime = block.timestamp;  // Record the start time of the stake
-
-        emit Staked(msg.sender, amount, rewardToken);  // Emit a Staked event
+    // Internal function to update the user's stake
+    function _updateStake(address user, address rewardToken, uint256 amount) internal {
+        Stake storage userStake = userStakes[user][rewardToken];
+        userStake.amount += amount;
+        userStake.startTime = block.timestamp;
     }
 
     // Function to withdraw staked tokens
     function withdraw(uint256 amount, address rewardToken) external nonReentrant whenNotPaused {
-        Stake storage userStake = stakes[msg.sender][rewardToken];  // Access the user's stake for this reward token
-        if (userStake.amount < amount) revert WithdrawAmountExceedsStake();  // Ensure the user has enough staked
+        Stake storage userStake = userStakes[msg.sender][rewardToken];
+        _validateWithdraw(userStake, amount);
 
+        uint256 penalty = _applyEarlyWithdrawalPenalty(userStake, amount);
+        userStake.amount -= amount;
+        stakingToken.transfer(msg.sender, amount);
+        emit Withdrawn(msg.sender, amount, penalty, rewardToken);
+    }
+
+    // Internal function to validate the withdrawal request
+    function _validateWithdraw(Stake storage userStake, uint256 amount) internal view {
+        if (userStake.amount < amount) revert WithdrawAmountExceedsStake();
+    }
+
+    // Internal function to apply the early withdrawal penalty if needed
+    function _applyEarlyWithdrawalPenalty(Stake storage userStake, uint256 amount) internal returns (uint256) {
         uint256 penalty = 0;
-        // Check if the withdrawal is before the minimum staking period ends
         if (block.timestamp < userStake.startTime + minStakingPeriod) {
-            penalty = (amount * earlyWithdrawalPenalty) / 1e20;  // Calculate penalty based on scaled value
-            amount -= penalty;  // Subtract penalty from the amount to be withdrawn
-            accumulatedPenalties += penalty;  // Add penalty to accumulated penalties
+            penalty = (amount * earlyWithdrawalPenalty) / 1e18;
+            amount -= penalty;
+            accumulatedPenalties += penalty;
         }
-
-        userStake.amount -= amount;  // Update the user's staked amount
-        stakingToken.transfer(msg.sender, amount);  // Transfer the remaining amount to the user
-
-        emit Withdrawn(msg.sender, amount, penalty, rewardToken);  // Emit a Withdrawn event
+        return penalty;
     }
 
     // Function to claim rewards based on staked tokens
     function claimReward(address rewardToken) external nonReentrant whenNotPaused {
-        Stake storage userStake = stakes[msg.sender][rewardToken];  // Access the user's stake for this reward token
-        if (userStake.amount == 0) revert NoStakeFound();  // Ensure the user has a stake
-        if (block.timestamp <= userStake.startTime + minStakingPeriod) revert CannotClaimRewardYet();  // Ensure the minimum staking period has passed
+        Stake storage userStake = userStakes[msg.sender][rewardToken];
+        _validateClaim(userStake);
 
-        uint256 stakingDuration = block.timestamp - userStake.startTime;  // Calculate the staking duration
-        uint256 rewardAmount = (userStake.amount * rewardRate * stakingDuration) / 1e18;  // Calculate the reward amount
+        uint256 rewardAmount = _calculateReward(userStake);
+        IERC20(rewardToken).transfer(msg.sender, rewardAmount);
+        userStake.startTime = block.timestamp;
+        emit RewardClaimed(msg.sender, rewardAmount, rewardToken);
+    }
 
-        IERC20(rewardToken).transfer(msg.sender, rewardAmount);  // Transfer the reward tokens to the user
+    // Internal function to validate the reward claim
+    function _validateClaim(Stake storage userStake) internal view {
+        if (userStake.amount == 0) revert NoStakeFound();
+        if (block.timestamp <= userStake.startTime + minStakingPeriod) revert CannotClaimRewardYet();
+    }
 
-        userStake.startTime = block.timestamp;  // Reset the stake start time
-
-        emit RewardClaimed(msg.sender, rewardAmount, rewardToken);  // Emit a RewardClaimed event
+    // Internal function to calculate the reward based on staking duration
+    function _calculateReward(Stake storage userStake) internal view returns (uint256) {
+        uint256 stakingDuration = block.timestamp - userStake.startTime;
+        return (userStake.amount * rewardRate * stakingDuration) / 1e18;
     }
 
     // Function for the contract owner to withdraw accumulated penalties
     function withdrawPenalties() external onlyOwner nonReentrant whenNotPaused {
-        uint256 amountToWithdraw = accumulatedPenalties;  // Get the total accumulated penalties
-        if (amountToWithdraw == 0) revert NoPenaltiesToWithdraw();  // Ensure there are penalties to withdraw
+        uint256 amountToWithdraw = accumulatedPenalties;
+        if (amountToWithdraw == 0) revert NoPenaltiesToWithdraw();
 
-        accumulatedPenalties = 0;  // Reset the accumulated penalties
-        stakingToken.transfer(owner(), amountToWithdraw);  // Transfer the penalties to the owner
-
-        emit PenaltiesWithdrawn(owner(), amountToWithdraw);  // Emit a PenaltiesWithdrawn event
+        accumulatedPenalties = 0;
+        stakingToken.transfer(owner(), amountToWithdraw);
+        emit PenaltiesWithdrawn(owner(), amountToWithdraw);
     }
 
     // Function to add a new reward token
     function addRewardToken(address rewardToken) external onlyOwner {
-        if (isRewardToken[rewardToken]) revert InvalidRewardToken();  // Ensure the token is not already a reward token
-        rewardTokens.push(rewardToken);  // Add the token to the reward tokens list
-        isRewardToken[rewardToken] = true;  // Mark the token as a valid reward token
+        _addRewardToken(rewardToken);
+    }
+
+    // Internal function to add a reward token and mark it as valid
+    function _addRewardToken(address rewardToken) internal {
+        if (isRewardToken[rewardToken]) revert InvalidRewardToken();
+        rewardTokens.push(rewardToken);
+        isRewardToken[rewardToken] = true;
+        emit RewardTokenAdded(rewardToken, msg.sender);
     }
 
     // Function to set the minimum staking period
     function setMinStakingPeriod(uint256 period) external onlyOwner {
+        emit MinStakingPeriodUpdated(minStakingPeriod, period, msg.sender);
         minStakingPeriod = period;
     }
 
     // Function to set the early withdrawal penalty percentage
     function setEarlyWithdrawalPenalty(uint256 penalty) external onlyOwner {
+        emit EarlyWithdrawalPenaltyUpdated(earlyWithdrawalPenalty, penalty, msg.sender);
         earlyWithdrawalPenalty = penalty * 1e18;
     }
 
     // Function to set the reward rate
     function setRewardRate(uint256 rate) external onlyOwner {
-        rewardRate = rate * 1e18;
+        emit RewardRateUpdated(rewardRate, rate, msg.sender);
+        rewardRate = rate;
     }
 
     // Function to get the list of reward tokens
@@ -145,8 +195,25 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
 
     // Function to get the staked amount of a user for a specific reward token
     function getStakedAmount(address user, address rewardToken) external view returns (uint256) {
-        if (!isRewardToken[rewardToken]) revert InvalidRewardToken();  // Ensure the reward token is valid
-        Stake storage userStake = stakes[user][rewardToken];  // Access the user's stake
-        return userStake.amount;  // Return the staked amount
+        if (!isRewardToken[rewardToken]) revert InvalidRewardToken();
+        return userStakes[user][rewardToken].amount;
+    }
+
+    // Function to get all staking data for a user, including the amount staked and the rewards earned
+    function getUserStakeData(address user) external view returns (Stake[] memory) {
+        uint256 tokenCount = rewardTokens.length;
+        Stake[] memory stakesData = new Stake[](tokenCount);
+
+        for (uint256 i = 0; i < tokenCount; i++) {
+            address rewardToken = rewardTokens[i];
+            Stake storage userStake = userStakes[user][rewardToken];
+            stakesData[i] = Stake({
+                amount: userStake.amount,
+                startTime: userStake.startTime,
+                rewardEarned: _calculateReward(userStake)
+            });
+        }
+
+        return stakesData;
     }
 }
