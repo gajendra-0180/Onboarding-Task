@@ -56,11 +56,6 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
         earlyWithdrawalPenalty = 1e16;
         rewardRate = 1 * 1e18;
 
-        _addRewardTokens(_rewardTokens);
-    }
-
-    // Internal function to add multiple reward tokens during initialization
-    function _addRewardTokens(address[] memory _rewardTokens) internal {
         for (uint256 i = 0; i < _rewardTokens.length; i++) {
             _addRewardToken(_rewardTokens[i]);
         }
@@ -78,67 +73,42 @@ contract StakingRewardSystem is Ownable, ReentrancyGuard, PausableUpgradeable, I
 
     // Function to stake tokens
     function stake(uint256 amount, address rewardToken) external nonReentrant whenNotPaused {
-        _validateStake(amount, rewardToken);
-        stakingToken.transferFrom(msg.sender, address(this), amount);
-        _updateStake(msg.sender, rewardToken, amount);
-        emit Staked(msg.sender, amount, rewardToken);
-    }
-
-    // Internal function to validate staking parameters
-    function _validateStake(uint256 amount, address rewardToken) internal view {
         if (amount <= 0) revert InvalidAmount();
         if (!isRewardToken[rewardToken]) revert InvalidRewardToken();
-    }
-
-    // Internal function to update the user's stake
-    function _updateStake(address user, address rewardToken, uint256 amount) internal {
-        Stake storage userStake = userStakes[user][rewardToken];
+        stakingToken.transferFrom(msg.sender, address(this), amount);
+        Stake storage userStake = userStakes[msg.sender][rewardToken];
         userStake.amount += amount;
         userStake.startTime = block.timestamp;
+        emit Staked(msg.sender, amount, rewardToken);
     }
 
     // Function to withdraw staked tokens
     function withdraw(uint256 amount, address rewardToken) external nonReentrant whenNotPaused {
         Stake storage userStake = userStakes[msg.sender][rewardToken];
-        _validateWithdraw(userStake, amount);
+         if (userStake.amount < amount) revert WithdrawAmountExceedsStake();
 
-        uint256 penalty = _applyEarlyWithdrawalPenalty(userStake, amount);
-        userStake.amount -= amount;
-        stakingToken.transfer(msg.sender, amount);
-        emit Withdrawn(msg.sender, amount, penalty, rewardToken);
-    }
-
-    // Internal function to validate the withdrawal request
-    function _validateWithdraw(Stake storage userStake, uint256 amount) internal view {
-        if (userStake.amount < amount) revert WithdrawAmountExceedsStake();
-    }
-
-    // Internal function to apply the early withdrawal penalty if needed
-    function _applyEarlyWithdrawalPenalty(Stake storage userStake, uint256 amount) internal returns (uint256) {
         uint256 penalty = 0;
         if (block.timestamp < userStake.startTime + minStakingPeriod) {
             penalty = (amount * earlyWithdrawalPenalty) / 1e18;
             amount -= penalty;
             accumulatedPenalties += penalty;
         }
-        return penalty;
+        userStake.amount -= amount;
+        stakingToken.transfer(msg.sender, amount);
+        emit Withdrawn(msg.sender, amount, penalty, rewardToken);
     }
 
+  
     // Function to claim rewards based on staked tokens
     function claimReward(address rewardToken) external nonReentrant whenNotPaused {
         Stake storage userStake = userStakes[msg.sender][rewardToken];
-        _validateClaim(userStake);
+        if (userStake.amount == 0) revert NoStakeFound();
+        if (block.timestamp <= userStake.startTime + minStakingPeriod) revert CannotClaimRewardYet();
 
         uint256 rewardAmount = _calculateReward(userStake);
         IERC20(rewardToken).transfer(msg.sender, rewardAmount);
         userStake.startTime = block.timestamp;
         emit RewardClaimed(msg.sender, rewardAmount, rewardToken);
-    }
-
-    // Internal function to validate the reward claim
-    function _validateClaim(Stake storage userStake) internal view {
-        if (userStake.amount == 0) revert NoStakeFound();
-        if (block.timestamp <= userStake.startTime + minStakingPeriod) revert CannotClaimRewardYet();
     }
 
     // Internal function to calculate the reward based on staking duration
