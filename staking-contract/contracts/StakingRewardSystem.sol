@@ -147,7 +147,6 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
     // Internal function to calculate the reward based on staking duration
     function _calculateReward(Stake calldata userStake) internal view returns (uint256) {
         uint256 stakingDuration = block.timestamp - userStake.startTime;
-        rewardRate/(scalingFactorForRewardRate*365*24*86400) * stakingDuration * userStake.amount 
         return (userStake.amount * rewardRate/(scalingFactorForRewardRate*365*24*86400) * stakingDuration) /100;
     }
 
