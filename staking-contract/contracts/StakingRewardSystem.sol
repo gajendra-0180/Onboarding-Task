@@ -27,8 +27,7 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
     uint256 public earlyWithdrawalPenalty;
     uint256 public rewardRate;
     uint256 public accumulatedPenalties;
-    uint256 public constant scalingFactorForRewardRate=1000;
-    uint256 public constant DENOMINATOR=10000;
+    uint256 public constant DENOMINATOR=1000000;
 
     // List of reward tokens
     address[] public rewardTokens;
@@ -76,7 +75,7 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
 
         minStakingPeriod = 30 * 86400;
         earlyWithdrawalPenalty = 100000;
-        rewardRate = 7000;
+        rewardRate = 70000;
 
         for (uint256 i = 0; i < _rewardTokens.length; i++) {
             _addRewardToken(_rewardTokens[i]);
@@ -147,7 +146,7 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
     // Internal function to calculate the reward based on staking duration
     function _calculateReward(Stake calldata userStake) internal view returns (uint256) {
         uint256 stakingDuration = block.timestamp - userStake.startTime;
-        return (userStake.amount * rewardRate/(scalingFactorForRewardRate*365*24*86400) * stakingDuration) /100;
+        return (userStake.amount * rewardRate/(DENOMINATOR*365*24*86400) * stakingDuration) ;
     }
 
 
@@ -189,7 +188,7 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
 
         uint256 penalty = 0;
         if (block.timestamp < userStake.startTime + minStakingPeriod) {
-            penalty = _amount * (earlyWithdrawalPenalty/(DENOMINATOR*100));
+            penalty = _amount * (earlyWithdrawalPenalty/(DENOMINATOR));
             if(_amount>userStake.amount) revert WithdrawAmountExceedsStake();
             _amount -= penalty;
             accumulatedPenalties += penalty;
