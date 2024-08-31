@@ -192,19 +192,8 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
             if(_amount>userStake.amount) revert WithdrawAmountExceedsStake();
             _amount -= penalty;
             accumulatedPenalties += penalty;
-            userStake.amount=userStake.amount-_amount-penalty;
         }
-        else{
-            uint256 rewardEarned= _calculateReward(userStake);
-            if(rewardEarned + userStake.amount<_amount) revert WithdrawAmountExceedsStake();
-            userStake.startTime = block.timestamp;
-            if(_amount>=rewardEarned) {
-                userStake.amount = userStake.amount - (_amount - rewardEarned);
-            } 
-            else{
-                userStake.amount = userStake.amount + (rewardEarned - _amount);
-            }
-        }
+        userStake.amount=userStake.amount-_amount-penalty;
         stakingToken.safeTransfer(msg.sender, _amount); 
         emit Withdrawn(msg.sender, _amount, penalty, _rewardToken);
     }
