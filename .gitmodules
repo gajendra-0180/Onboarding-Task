@@ -1,0 +1,3 @@
+[submodule "StakingReward/lib/forge-std"]
+	path = StakingReward/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
