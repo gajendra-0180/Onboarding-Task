@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 import "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+// import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+// import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuard, PausableUpgradeable {
+contract StakingRewardSystem is Initializable,OwnableUpgradeable {
+// contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuard, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     // The token that users will stake
@@ -69,8 +70,8 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
     function initialize(address _stakingToken, address[] memory _rewardTokens) public initializer {
         if (_rewardTokens.length == 0) revert InvalidInput("At least one reward token must be provided");
         if (_stakingToken == address(0)) revert InvalidInput("Staking token address cannot be zero");
-        __Ownable_init();
-        __Pausable_init();
+        // __Ownable_init();
+        // __Pausable_init();
         stakingToken = IERC20(_stakingToken);
 
         minStakingPeriod = 30 * 86400;
@@ -84,18 +85,18 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
 
 /********************** ADMIN FUNCTIONS **********************/
 
-    // Pause the contract
-    function pause() external onlyOwner {
-        _pause();
-    }
+    // // Pause the contract
+    // function pause() external onlyOwner {
+    //     _pause();
+    // }
 
-    // Unpause the contract
-    function unpause() external onlyOwner {
-        _unpause();
-    }
+    // // Unpause the contract
+    // function unpause() external onlyOwner {
+    //     _unpause();
+    // }
 
     // Function for the contract owner to withdraw accumulated penalties
-    function withdrawPenalties() external onlyOwner nonReentrant whenNotPaused {
+    function withdrawPenalties() external onlyOwner {
         uint256 amountToWithdraw = accumulatedPenalties;
         if (amountToWithdraw <= 0) revert NoPenaltiesToWithdraw();
 
@@ -144,7 +145,7 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
     }
 
     // Internal function to calculate the reward based on staking duration
-    function _calculateReward(Stake calldata userStake) internal view returns (uint256) {
+    function _calculateReward(Stake memory userStake) internal view returns (uint256) {
         uint256 stakingDuration = block.timestamp - userStake.startTime;
         return (userStake.amount * rewardRate/(DENOMINATOR*365*24*86400) * stakingDuration) ;
     }
@@ -172,7 +173,7 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
 
 
     // Function to stake tokens
-    function stake(uint256 _amount, address _rewardToken) external nonReentrant whenNotPaused {
+    function stake(uint256 _amount, address _rewardToken) external   {
         _validateStakingParameters(_amount, _rewardToken);
         stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
         Stake storage userStake = userStakes[msg.sender][_rewardToken];
@@ -182,7 +183,7 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
     }
 
     // Function to withdraw staked tokens
-    function withdraw(uint256 _amount, address _rewardToken) external nonReentrant whenNotPaused {
+    function withdraw(uint256 _amount, address _rewardToken) external {
         _validateStakingParameters(_amount, _rewardToken);
         Stake storage userStake = userStakes[msg.sender][_rewardToken];
 
@@ -200,7 +201,7 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable, ReentrancyGuar
 
   
     // Function to claim rewards based on staked tokens
-    function claimReward(address _rewardToken) external nonReentrant whenNotPaused {
+    function claimReward(address _rewardToken) external  {
         Stake storage userStake = _validateRewardTokenAndStake(msg.sender, _rewardToken);
         if (block.timestamp < userStake.startTime + minStakingPeriod) revert CannotClaimRewardYet();
 
