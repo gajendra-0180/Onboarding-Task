@@ -1,9 +1,0 @@
-[submodule "staking-contract/StakingRewardSystemTest/lib/forge-std"]
-	path = staking-contract/StakingRewardSystemTest/lib/forge-std
-	url = https://github.com/foundry-rs/forge-std
-[submodule "StakingRewardSystemTest/lib/forge-std"]
-	path = StakingRewardSystemTest/lib/forge-std
-	url = https://github.com/foundry-rs/forge-std
-[submodule "StakingRewardSystemTest/lib/openzeppelin-contracts"]
-	path = StakingRewardSystemTest/lib/openzeppelin-contracts
-	url = https://github.com/OpenZeppelin/openzeppelin-contracts
