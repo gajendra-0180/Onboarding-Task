@@ -44,7 +44,7 @@ contract StakingRewardSystemTest is Test {
     address public user2 = address(3);
 
     uint256 public initialBalance = 1000 ether;
-    uint256 public stakeAmount = 100 ether;
+    uint256 public stakeAmount = 0.0000000000000002 ether;
 
     function setUp() public {
         // Deploy mock tokens
@@ -61,14 +61,16 @@ contract StakingRewardSystemTest is Test {
 
         // Deploy StakingRewardSystem contract
         stakingRewardSystem = new StakingRewardSystem();
-          address[] memory rewardTokens;
+        address[] memory rewardTokens = new address[](2);
+         rewardTokens[0] = address(rewardToken1);
+         rewardTokens[1] = address(rewardToken2);
         // rewardToken1 = address(rewardToken1);
         // rewardToken2 = address(rewardToken2);
-        rewardTokens[0] = address(rewardToken1);
         stakingRewardSystem.initialize(address(stakingToken), rewardTokens);
         // stakingRewardSystem.initialize(address(stakingToken), address(rewardToken1));
 
-        // Transfer ownership to the owner address
+           // Transfer ownership to the owner address
+    vm.prank(stakingRewardSystem.owner());
         stakingRewardSystem.transferOwnership(owner);
     }
 
@@ -82,8 +84,9 @@ contract StakingRewardSystemTest is Test {
         stakingRewardSystem.stake(stakeAmount, address(rewardToken1));
 
         // Check if the stake is recorded
-        // uint256 stakedAmount = stakingRewardSystem.getStakedAmount(user1, address(rewardToken1));
-        // assertEq(stakedAmount, stakeAmount);
+            console.log("Approved stakeAmount:", stakeAmount);
+        uint256 stakedAmount = stakingRewardSystem.getStakedAmount(user1, address(rewardToken1));
+        assertEq(stakedAmount, stakeAmount);
 
         vm.stopPrank();
     }

@@ -39,7 +39,7 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable {
 
 /* ============ Constructor ============ */
     constructor() {
-        _disableInitializers();
+        // _disableInitializers();
     }
 
 /* ============== Events ============== */
