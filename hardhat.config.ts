@@ -9,7 +9,7 @@
 
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-ethers");
-
+require("hardhat/config")
 module.exports = {
   solidity: "0.8.20",
   networks: {
