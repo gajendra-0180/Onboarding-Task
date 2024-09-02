@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.24;
+pragma solidity 0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -34,9 +34,9 @@ contract StakingRewardSystem is Initializable,OwnableUpgradeable {
     mapping(address => mapping(address => Stake)) private userStakes;
 
 /* ============ Constructor ============ */
-    constructor() {
-        // _disableInitializers();
-    }
+    // constructor() {
+    //     // _disableInitializers();
+    // }
 
 /* ============== Events ============== */
 
