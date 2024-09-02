@@ -21,6 +21,18 @@ contract MockToken is ERC20 {
 }
 
 contract StakingRewardSystemTest is Test {
+
+    /* ============== Errors ============= */
+    error InvalidAmount();
+    error InvalidRewardToken();
+    error WithdrawAmountExceedsStake();
+    error NoStakeFound();
+    error CannotClaimRewardYet();
+    error NoPenaltiesToWithdraw();
+    error InvalidInput(string message); 
+    error UserNotExist();  
+
+
     /* ============== Events ============== */
 
     event Staked(address indexed user, uint256 amount, address indexed rewardToken);
@@ -73,53 +85,43 @@ contract StakingRewardSystemTest is Test {
         vm.prank(stakingRewardSystem.owner());
         stakingRewardSystem.transferOwnership(owner);
     }
-    // function testSetMinStakingPeriodAsOwner() public {
-    //     vm.prank(owner);
-    //     stakingRewardSystem.setMinStakingPeriod(45);
+    function testSetMinStakingPeriodAsOwner() public {
+        vm.prank(owner);
+        stakingRewardSystem.setMinStakingPeriod(45);
 
-    //     assertEq(stakingRewardSystem.minStakingPeriod(), 45 * 86400);
-    // }
-    //   function testSetMinStakingPeriodAsNonOwner() public {
-    //     vm.prank(user1);
-    //     vm.expectRevert("Ownable: caller is not the owner");
-    //     stakingRewardSystem.setMinStakingPeriod(45);
-    // }
+        assertEq(stakingRewardSystem.minStakingPeriod(), 45 * 86400);
+    }
 
-    // function testSetEarlyWithdrawalPenaltyAsOwner() public {
-    //     vm.prank(owner);
-    //     stakingRewardSystem.setEarlyWithdrawalPenalty(50000);
+    function testSetEarlyWithdrawalPenaltyAsOwner() public {
+        vm.prank(owner);
+        stakingRewardSystem.setEarlyWithdrawalPenalty(50000);
 
-    //     assertEq(stakingRewardSystem.earlyWithdrawalPenalty(), 50000);
-    // }
-    // function testSetEarlyWithdrawalPenaltyAsNonOwner() public {
-    //     vm.prank(user1);
-    //     vm.expectRevert("Ownable: caller is not the owner");
-    //     stakingRewardSystem.setEarlyWithdrawalPenalty(50000);
-    // }
-    //  function testSetRewardRateAsOwner() public {
-    //     vm.prank(owner);
-    //     stakingRewardSystem.setRewardRate(90000);
+        assertEq(stakingRewardSystem.earlyWithdrawalPenalty(), 50000);
+    }
+     function testSetRewardRateAsOwner() public {
+        vm.prank(owner);
+        stakingRewardSystem.setRewardRate(90000);
 
-    //     assertEq(stakingRewardSystem.rewardRate(), 90000);
-    // }
-    // function testSetRewardRateInvalidInput() public {
-    //     vm.prank(owner);
-    //     vm.expectRevert("InvalidInput(\"Reward rate must be greater than zero\")");
-    //     stakingRewardSystem.setRewardRate(0);
-    // }
+        assertEq(stakingRewardSystem.rewardRate(), 90000);
+    }
+    function testSetRewardRateInvalidInput() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(InvalidInput.selector, "Reward rate must be greater than zero"));
+        stakingRewardSystem.setRewardRate(0);
+    }
 
     //  function testWithdrawPenaltiesAsOwner() public {
     //     vm.startPrank(owner);
     //     stakingRewardSystem.setEarlyWithdrawalPenalty(100000); // Set penalty to 10%
 
     //     vm.startPrank(user1);
-    //     stakingToken.approve(address(stakingRewardSystem), 1 ether);
-    //     stakingRewardSystem.stake(1 ether, address(rewardToken1));
+    //     stakingToken.approve(address(stakingRewardSystem), 1 );
+    //     stakingRewardSystem.stake(1 , address(rewardToken1));
 
     //     // Fast forward time to trigger penalty
     //     vm.warp(block.timestamp + 1 days);
     //    vm.startPrank(user1);
-    //     stakingRewardSystem.withdraw(1 ether, address(rewardToken1));
+    //     stakingRewardSystem.withdraw(1 , address(rewardToken1));
 
     //     uint256 accumulatedPenalty = stakingRewardSystem.accumulatedPenalties();
     //     assert(accumulatedPenalty > 0);
@@ -131,70 +133,74 @@ contract StakingRewardSystemTest is Test {
     //     assertEq(stakingRewardSystem.accumulatedPenalties(), 0);
     // }
     
-    // function testStake() public {
-    //     vm.startPrank(user1);
-    //     stakingToken.approve(address(stakingRewardSystem), 100 ether);
-    //     stakingRewardSystem.stake(100 ether, address(rewardToken1));
-    //     console.log("user1 amount:" , stakingToken.balanceOf(address(user1)));
-    //     assertEq(stakingRewardSystem.getStakedAmount(user1, address(rewardToken1)), 100 ether);
-    //     vm.stopPrank();
-    // }
+    function testStake() public {
+        vm.startPrank(user1);
+        stakingToken.approve(address(stakingRewardSystem), 100 ether);
+        stakingRewardSystem.stake(100 ether, address(rewardToken1));
+        console.log("user1 amount:" , stakingToken.balanceOf(address(user1)));
+        assertEq(stakingRewardSystem.getStakedAmount(user1, address(rewardToken1)), 100 ether);
+        vm.stopPrank();
+    }
 
-        // function testStakeWithInvalidAmount() public {
-        // vm.startPrank(user1);
-        // stakingToken.approve(address(stakingRewardSystem), 0);
-        // stakingRewardSystem.stake(0, address(rewardToken1));
-        // vm.stopPrank();
-        // }
+        function testStakeWithInvalidAmount() public {
+        vm.startPrank(user1);
+        stakingToken.approve(address(stakingRewardSystem), 0);
+        vm.expectRevert(InvalidAmount.selector);
+        stakingRewardSystem.stake(0, address(rewardToken1));
+        vm.stopPrank();
+        }
 
-    //     function testStakeWithInvalidRewardToken() public {
-    //     vm.startPrank(user1);
-    //     stakingToken.approve(address(stakingRewardSystem), 100 ether);
-    //     stakingRewardSystem.stake(100 ether, address(0));
-    //     vm.stopPrank();
-    // }
+        function testStakeWithInvalidRewardToken() public {
+        vm.startPrank(user1);
+        stakingToken.approve(address(stakingRewardSystem), 100 ether);
+        vm.expectRevert(abi.encodeWithSelector(InvalidInput.selector, "Reward token address cannot be zero"));
+        stakingRewardSystem.stake(100 ether, address(0));
+        vm.stopPrank();
+    }
 
-    // function testWithdraw() public {
-    //     vm.startPrank(user1);
-    //     stakingToken.approve(address(stakingRewardSystem), 100 ether);
-    //     console.log(stakingToken.balanceOf(address(user1)));
-    //     stakingRewardSystem.stake(100 ether, address(rewardToken1));
-    //     console.log(stakingToken.balanceOf(address(user1)));
-    //     vm.warp(block.timestamp + 30 days);
-    //     stakingRewardSystem.withdraw(50 ether, address(rewardToken1));
-    //     console.log(stakingToken.balanceOf(address(user1)));
-    //     assertEq(stakingRewardSystem.getStakedAmount(user1, address(rewardToken1)), 50 ether);
-    //     console.log(stakingToken.balanceOf(address(user1)));
-    //     vm.stopPrank();
-    // }
+    function testWithdraw() public {
+        vm.startPrank(user1);
+        stakingToken.approve(address(stakingRewardSystem), 100 ether);
+        console.log(stakingToken.balanceOf(address(user1)));
+        stakingRewardSystem.stake(100 ether, address(rewardToken1));
+        console.log(stakingToken.balanceOf(address(user1)));
+        vm.warp(block.timestamp + 30 days);
+        stakingRewardSystem.withdraw(50 ether, address(rewardToken1));
+        console.log(stakingToken.balanceOf(address(user1)));
+        assertEq(stakingRewardSystem.getStakedAmount(user1, address(rewardToken1)), 50 ether);
+        console.log(stakingToken.balanceOf(address(user1)));
+        vm.stopPrank();
+    }
 
-    //     function testWithdrawExceedingStake() public {
-    //     vm.startPrank(user1);
-    //     stakingToken.approve(address(stakingRewardSystem), 100 ether);
-    //     stakingRewardSystem.stake(100 ether, address(rewardToken1));
-    //     stakingRewardSystem.withdraw(150 ether, address(rewardToken1));
-    //     vm.stopPrank();
-    // }
+        function testWithdrawExceedingStake() public {
+        vm.startPrank(user1);
+        stakingToken.approve(address(stakingRewardSystem), 100 ether);
+        stakingRewardSystem.stake(100 ether, address(rewardToken1));
+        vm.expectRevert(WithdrawAmountExceedsStake.selector);
+        stakingRewardSystem.withdraw(150 ether, address(rewardToken1));
+        vm.stopPrank();
+    }
 
-    //  function testClaimReward() public {
-    //     vm.startPrank(user1);
-    //     stakingToken.approve(address(stakingRewardSystem), 10 );
-    //     stakingRewardSystem.stake(1 , address(rewardToken1));
-    //     vm.warp(block.timestamp + 30 days);
-    //     uint256 rewardAmount = stakingRewardSystem.getUserStakeData(user1)[0].rewardEarned;
-    //     stakingRewardSystem.claimReward(address(rewardToken1));
-    //     console.log(rewardAmount);
-    //     assertEq(rewardToken1.balanceOf(user1), rewardAmount);
-    //     vm.stopPrank();
-    // }
+     function testClaimReward() public {
+        vm.startPrank(user1);
+        stakingToken.approve(address(stakingRewardSystem), 10 );
+        stakingRewardSystem.stake(1 , address(rewardToken1));
+        vm.warp(block.timestamp + 30 days);
+        uint256 rewardAmount = stakingRewardSystem.getUserStakeData(user1)[0].rewardEarned;
+        stakingRewardSystem.claimReward(address(rewardToken1));
+        console.log(rewardAmount);
+        assertEq(rewardToken1.balanceOf(user1), rewardAmount);
+        vm.stopPrank();
+    }
 
-    //     function testClaimRewardBeforeMinStakingPeriod() public {
-    //     vm.startPrank(user1);
-    //     stakingToken.approve(address(stakingRewardSystem), 100 ether);
-    //     stakingRewardSystem.stake(100 ether, address(rewardToken1));
-    //     stakingRewardSystem.claimReward(address(rewardToken1));
-    //     vm.stopPrank();
-    // }
+        function testClaimRewardBeforeMinStakingPeriod() public {
+        vm.startPrank(user1);
+        stakingToken.approve(address(stakingRewardSystem), 100 ether);
+        stakingRewardSystem.stake(100 ether, address(rewardToken1));
+        vm.expectRevert(CannotClaimRewardYet.selector);
+        stakingRewardSystem.claimReward(address(rewardToken1));
+        vm.stopPrank();
+    }
 
     //     function testWithdrawPenalties() public {
     //     vm.startPrank(user1);
@@ -210,52 +216,57 @@ contract StakingRewardSystemTest is Test {
     //     assertEq(stakingToken.balanceOf(owner), accumulatedPenalties);
     // }
 
-    // function testGetUserStakeDataWithStakes() public {
-    //     vm.startPrank(user1);
-    //     stakingToken.approve(address(stakingRewardSystem), 100 ether);
-    //     stakingRewardSystem.stake(100 ether, address(rewardToken1));
-    //     console.log("user1 amount:" , stakingToken.balanceOf(address(user1)));
-    //     stakingRewardSystem.getUserStakeData(user1);
-    // }
-    // function testGetUserStakeDataWithNoStakes() public {
-    //     stakingRewardSystem.getUserStakeData(user1);
-    // }
+    function testGetUserStakeDataWithStakes() public {
+        vm.startPrank(user1);
+        stakingToken.approve(address(stakingRewardSystem), 100 ether);
+        stakingRewardSystem.stake(100 ether, address(rewardToken1));
+        console.log("user1 amount:" , stakingToken.balanceOf(address(user1)));
+        stakingRewardSystem.getUserStakeData(user1);
+    }
+    function testGetUserStakeDataWithNoStakes() public {
+        vm.expectRevert(UserNotExist.selector);
+        stakingRewardSystem.getUserStakeData(user1);
+    }
 
-    //    function testGetUserStakeData() public {
-    //     vm.startPrank(user1);
-    //     stakingToken.approve(address(stakingRewardSystem), 100 );
-    //     stakingRewardSystem.stake(100 , address(rewardToken1));
-    //     vm.warp(block.timestamp + 30 );
-    //     StakingRewardSystem.Stake[] memory stakeData = stakingRewardSystem.getUserStakeData(user1);
-    //     assertEq(stakeData.length, 1);
-    //     assertEq(stakeData[0].amount, 100 );
-    //     vm.stopPrank();
-    // }
+    function testGetRewardTokens() public {
+        stakingRewardSystem.getRewardTokens();
+    }
 
-    //  function testAddRewardToken() public {
-    //     vm.startPrank(owner);
-    //     MockToken rewardToken3 = new MockToken("Reward Token 2", "RT2");
-    //     stakingRewardSystem.addRewardToken(address(rewardToken3));
+       function testGetUserStakeData() public {
+        vm.startPrank(user1);
+        stakingToken.approve(address(stakingRewardSystem), 100 );
+        stakingRewardSystem.stake(100 , address(rewardToken1));
+        vm.warp(block.timestamp + 30 );
+        StakingRewardSystem.Stake[] memory stakeData = stakingRewardSystem.getUserStakeData(user1);
+        assertEq(stakeData.length, 1);
+        assertEq(stakeData[0].amount, 100 );
+        vm.stopPrank();
+    }
 
-    //     assertTrue(stakingRewardSystem.isRewardToken(address(rewardToken3)));
-    //     vm.stopPrank();
-    // }
+     function testAddRewardToken() public {
+        vm.startPrank(owner);
+        MockToken rewardToken3 = new MockToken("Reward Token 2", "RT2");
+        stakingRewardSystem.addRewardToken(address(rewardToken3));
 
-    // function testAdminFunctions() public {
-    //     vm.startPrank(owner);
+        assertTrue(stakingRewardSystem.isRewardToken(address(rewardToken3)));
+        vm.stopPrank();
+    }
 
-    //     // Set new minimum staking period
-    //     stakingRewardSystem.setMinStakingPeriod(60);
-    //     assertEq(stakingRewardSystem.minStakingPeriod(), 60 * 86400);
+    function testAdminFunctions() public {
+        vm.startPrank(owner);
 
-    //     // Set new early withdrawal penalty
-    //     stakingRewardSystem.setEarlyWithdrawalPenalty(200000);
-    //     assertEq(stakingRewardSystem.earlyWithdrawalPenalty(), 200000);
+        // Set new minimum staking period
+        stakingRewardSystem.setMinStakingPeriod(60);
+        assertEq(stakingRewardSystem.minStakingPeriod(), 60 * 86400);
 
-    //     // Set new reward rate
-    //     stakingRewardSystem.setRewardRate(80000);
-    //     assertEq(stakingRewardSystem.rewardRate(), 80000);
+        // Set new early withdrawal penalty
+        stakingRewardSystem.setEarlyWithdrawalPenalty(200000);
+        assertEq(stakingRewardSystem.earlyWithdrawalPenalty(), 200000);
 
-    //     vm.stopPrank();
-    // }
+        // Set new reward rate
+        stakingRewardSystem.setRewardRate(80000);
+        assertEq(stakingRewardSystem.rewardRate(), 80000);
+
+        vm.stopPrank();
+    }
 }
